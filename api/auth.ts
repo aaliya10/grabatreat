@@ -26,7 +26,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { action, email, password, name, role } = req.body;
+    const { action, email, _password, name, role } = req.body;
 
     // Login with mock data
     if (action === 'login') {

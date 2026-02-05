@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { mockOrders, mockRestaurants, mockMenuItems, Order } from './utils/mockData';
+import { mockOrders, Order } from './utils/mockData';
 
 // In-memory storage for this demo
 let orders = [...mockOrders];
@@ -18,7 +18,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   // GET - Retrieve orders
   if (req.method === 'GET') {
-    const { userId, status, action } = req.query;
+    const { userId, status } = req.query;
 
     // Get user's orders
     if (userId) {
