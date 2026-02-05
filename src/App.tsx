@@ -2047,10 +2047,36 @@ const RefundModal = ({ isOpen, onClose, onSubmit, orderId }: { isOpen: boolean, 
   );
 };
 
-const formatOrderDateTime = (timestamp: number): string => {
-  if (!timestamp || isNaN(timestamp)) return 'Unknown Date';
+const toMillis = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  if (typeof (value as { toMillis?: () => number }).toMillis === 'function') {
+    const time = (value as { toMillis: () => number }).toMillis();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof (value as { seconds?: number }).seconds === 'number') {
+    const seconds = (value as { seconds: number }).seconds;
+    const nanos = typeof (value as { nanoseconds?: number }).nanoseconds === 'number'
+      ? (value as { nanoseconds: number }).nanoseconds
+      : 0;
+    return seconds * 1000 + Math.floor(nanos / 1e6);
+  }
+  return null;
+};
+
+const formatOrderDateTime = (timestamp: unknown): string => {
+  const millis = toMillis(timestamp);
+  if (!millis) return 'Unknown Date';
   try {
-    const date = new Date(timestamp);
+    const date = new Date(millis);
     if (isNaN(date.getTime())) return 'Invalid Date';
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');

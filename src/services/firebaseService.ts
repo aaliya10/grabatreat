@@ -222,7 +222,7 @@ export const updateOrderStatus = async (orderId: string, status: string): Promis
 export const assignRiderToOrder = async (orderId: string, riderId: string): Promise<void> => {
   try {
     const orderRef = doc(db, 'orders', orderId);
-    await updateDoc(orderRef, { riderId, status: 'out_for_delivery' });
+    await updateDoc(orderRef, { riderId, status: 'PICKED_UP' });
   } catch (error: any) {
     throw new Error(`Failed to assign rider: ${error.message}`);
   }

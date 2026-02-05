@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   createOrder as createOrderInFirestore,
+  updateOrderStatus as updateOrderStatusInFirestore,
+  assignRiderToOrder,
   subscribeToCustomerOrders,
   subscribeToRestaurantOrders,
-  subscribeToRiderOrders,
+  subscribeToAllOrders,
 } from '../services/firebaseService';
 import { auth } from '../config/firebase';
 import { signInAnonymously } from 'firebase/auth';
@@ -29,6 +31,7 @@ export interface Order {
   restaurantName: string;
   timestamp: number;
   customerName: string;
+  riderId?: string;
   address?: string;
   pnr?: string;
   coach?: string;
@@ -118,6 +121,31 @@ interface GlobalContextType {
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
+
+const toMillis = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  if (typeof (value as { toMillis?: () => number }).toMillis === 'function') {
+    const time = (value as { toMillis: () => number }).toMillis();
+    return Number.isFinite(time) ? time : null;
+  }
+  if (typeof (value as { seconds?: number }).seconds === 'number') {
+    const seconds = (value as { seconds: number }).seconds;
+    const nanos = typeof (value as { nanoseconds?: number }).nanoseconds === 'number'
+      ? (value as { nanoseconds: number }).nanoseconds
+      : 0;
+    return seconds * 1000 + Math.floor(nanos / 1e6);
+  }
+  return null;
+};
 
 const INITIAL_RESTAURANTS: Restaurant[] = [
   {
@@ -379,9 +407,24 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+    const firebaseConfigured = import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== 'YOUR_API_KEY';
+    const riderId = userSession.role === 'rider' ? userSession.mobile : undefined;
+
     setOrders(prev => prev.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
+      order.id === orderId ? { ...order, status: newStatus, ...(riderId && newStatus === 'PICKED_UP' ? { riderId } : {}) } : order
     ));
+
+    if (firebaseConfigured) {
+      if (riderId && newStatus === 'PICKED_UP') {
+        assignRiderToOrder(orderId, riderId).catch((err) => {
+          console.error('[ORDER] Failed to assign rider:', err.code || err.message || err);
+        });
+      } else {
+        updateOrderStatusInFirestore(orderId, newStatus).catch((err) => {
+          console.error('[ORDER] Failed to update order status:', err.code || err.message || err);
+        });
+      }
+    }
   };
 
   const toggleMenuItemAvailability = (restaurantId: number, menuItemId: number) => {
@@ -558,8 +601,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             type: 'HOME',
             restaurantId: ridId,
             restaurantName: restaurant?.name || 'Restaurant',
-            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            timestamp: toMillis(o.createdAt) ?? Date.now(),
             customerName: userSession.name || '',
+            riderId: o.riderId,
             pickupOtp: o.pickupOtp || '6789',
             deliveryOtp: o.deliveryOtp || '9876',
             review: o.review,
@@ -584,8 +628,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             type: 'HOME',
             restaurantId: o.restaurantId || rid,
             restaurantName: restaurant?.name || 'Restaurant',
-            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            timestamp: toMillis(o.createdAt) ?? Date.now(),
             customerName: o.customerName || o.customerId || '',
+            riderId: o.riderId,
             pickupOtp: o.pickupOtp || '6789',
             deliveryOtp: o.deliveryOtp || '9876',
             review: o.review,
@@ -596,9 +641,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setOrders(mapped.reverse());
       });
     } else if (userSession.role === 'rider') {
-      console.log('[SYNC] Rider detected. Subscribing to rider orders for:', userSession.mobile);
-      unsub = subscribeToRiderOrders(userSession.mobile, (remoteOrders) => {
-        console.log('[SYNC] Received rider orders from Firestore:', remoteOrders.length);
+      console.log('[SYNC] Rider detected. Subscribing to all orders for availability.');
+      unsub = subscribeToAllOrders((remoteOrders) => {
+        console.log('[SYNC] Received orders from Firestore:', remoteOrders.length);
         const mapped = remoteOrders.map((o: any) => {
           const ridId = o.restaurantId || 1;
           const restaurant = restaurants.find(r => r.id === ridId);
@@ -610,8 +655,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             type: 'HOME',
             restaurantId: ridId,
             restaurantName: restaurant?.name || 'Restaurant',
-            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            timestamp: toMillis(o.createdAt) ?? Date.now(),
             customerName: o.customerName || o.customerId || '',
+            riderId: o.riderId,
             pickupOtp: o.pickupOtp || '6789',
             deliveryOtp: o.deliveryOtp || '9876',
             review: o.review,
