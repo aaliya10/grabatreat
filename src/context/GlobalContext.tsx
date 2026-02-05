@@ -547,22 +547,26 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       unsub = subscribeToCustomerOrders(userSession.mobile, (remoteOrders) => {
         console.log('[SYNC] Received customer orders from Firestore:', remoteOrders.length);
         // Map remote orders to local Order shape as best-effort
-        const mapped = remoteOrders.map((o: any) => ({
-          id: o.id,
-          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
-          totalPrice: o.totalPrice || 0,
-          status: (o.status as any) || 'PENDING',
-          type: 'HOME',
-          restaurantId: o.restaurantId || 1,
-          restaurantName: '',
-          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
-          customerName: userSession.name || '',
-          pickupOtp: o.pickupOtp || '6789',
-          deliveryOtp: o.deliveryOtp || '9876',
-          review: o.review,
-          refundStatus: o.refundStatus,
-          refundReason: o.refundReason,
-        } as Order));
+        const mapped = remoteOrders.map((o: any) => {
+          const ridId = o.restaurantId || 1;
+          const restaurant = restaurants.find(r => r.id === ridId);
+          return {
+            id: o.id,
+            items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+            totalPrice: o.totalPrice || 0,
+            status: (o.status as any) || 'PENDING',
+            type: 'HOME',
+            restaurantId: ridId,
+            restaurantName: restaurant?.name || 'Restaurant',
+            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            customerName: userSession.name || '',
+            pickupOtp: o.pickupOtp || '6789',
+            deliveryOtp: o.deliveryOtp || '9876',
+            review: o.review,
+            refundStatus: o.refundStatus,
+            refundReason: o.refundReason,
+          } as Order;
+        });
         setOrders(mapped.reverse());
       });
     } else if (userSession.role === 'partner') {
@@ -570,44 +574,51 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.log('[SYNC] Partner detected. Subscribing to restaurant orders for:', rid);
       unsub = subscribeToRestaurantOrders(rid, (remoteOrders) => {
         console.log('[SYNC] Received partner orders from Firestore:', remoteOrders.length);
-        const mapped = remoteOrders.map((o: any) => ({
-          id: o.id,
-          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
-          totalPrice: o.totalPrice || 0,
-          status: (o.status as any) || 'PENDING',
-          type: 'HOME',
-          restaurantId: o.restaurantId || rid,
-          restaurantName: '',
-          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
-          customerName: o.customerName || o.customerId || '',
-          pickupOtp: o.pickupOtp || '6789',
-          deliveryOtp: o.deliveryOtp || '9876',
-          review: o.review,
-          refundStatus: o.refundStatus,
-          refundReason: o.refundReason,
-        } as Order));
+        const mapped = remoteOrders.map((o: any) => {
+          const restaurant = restaurants.find(r => r.id === (o.restaurantId || rid));
+          return {
+            id: o.id,
+            items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+            totalPrice: o.totalPrice || 0,
+            status: (o.status as any) || 'PENDING',
+            type: 'HOME',
+            restaurantId: o.restaurantId || rid,
+            restaurantName: restaurant?.name || 'Restaurant',
+            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            customerName: o.customerName || o.customerId || '',
+            pickupOtp: o.pickupOtp || '6789',
+            deliveryOtp: o.deliveryOtp || '9876',
+            review: o.review,
+            refundStatus: o.refundStatus,
+            refundReason: o.refundReason,
+          } as Order;
+        });
         setOrders(mapped.reverse());
       });
     } else if (userSession.role === 'rider') {
       console.log('[SYNC] Rider detected. Subscribing to rider orders for:', userSession.mobile);
       unsub = subscribeToRiderOrders(userSession.mobile, (remoteOrders) => {
         console.log('[SYNC] Received rider orders from Firestore:', remoteOrders.length);
-        const mapped = remoteOrders.map((o: any) => ({
-          id: o.id,
-          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
-          totalPrice: o.totalPrice || 0,
-          status: (o.status as any) || 'PENDING',
-          type: 'HOME',
-          restaurantId: o.restaurantId || 1,
-          restaurantName: '',
-          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
-          customerName: o.customerName || o.customerId || '',
-          pickupOtp: o.pickupOtp || '6789',
-          deliveryOtp: o.deliveryOtp || '9876',
-          review: o.review,
-          refundStatus: o.refundStatus,
-          refundReason: o.refundReason,
-        } as Order));
+        const mapped = remoteOrders.map((o: any) => {
+          const ridId = o.restaurantId || 1;
+          const restaurant = restaurants.find(r => r.id === ridId);
+          return {
+            id: o.id,
+            items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+            totalPrice: o.totalPrice || 0,
+            status: (o.status as any) || 'PENDING',
+            type: 'HOME',
+            restaurantId: ridId,
+            restaurantName: restaurant?.name || 'Restaurant',
+            timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+            customerName: o.customerName || o.customerId || '',
+            pickupOtp: o.pickupOtp || '6789',
+            deliveryOtp: o.deliveryOtp || '9876',
+            review: o.review,
+            refundStatus: o.refundStatus,
+            refundReason: o.refundReason,
+          } as Order;
+        });
         setOrders(mapped.reverse());
       });
     }
