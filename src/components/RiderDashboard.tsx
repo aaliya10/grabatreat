@@ -16,14 +16,18 @@ import { useGlobal } from '../context/GlobalContext';
 const RiderDashboard = ({ onLogout }: { onLogout: () => void }) => {
   const { userSession, orders, updateOrderStatus, setUserStatus } = useGlobal();
   const [activeTab, setActiveTab] = useState<'tasks' | 'earnings' | 'profile'>('tasks');
+  const [otpOrderId, setOtpOrderId] = useState<string | null>(null);
+  const [otpValue, setOtpValue] = useState('');
 
   const myStatus = userSession?.status || 'OFFLINE';
 
-  // My Tasks: In our mock, any order picked up is assigned to the current rider
-  const activeTasks = orders.filter(o => o.status === 'PICKED_UP');
+  // My Tasks: Picked up orders assigned to this rider
+  const activeTasks = orders.filter(o => o.status === 'PICKED_UP' && o.riderId === userSession.mobile);
   
-  // Available Tasks: Orders READY at any restaurant but not yet picked up
-  const availableOrders = myStatus === 'AVAILABLE' ? orders.filter(o => o.status === 'READY') : [];
+  // Available Tasks: READY orders not yet assigned
+  const availableOrders = myStatus === 'AVAILABLE'
+    ? orders.filter(o => o.status === 'READY' && !o.riderId)
+    : [];
   
   // Past Deliveries: Status DELIVERED
   const pastDeliveries = orders.filter(o => o.status === 'DELIVERED');
@@ -300,28 +304,17 @@ const RiderDashboard = ({ onLogout }: { onLogout: () => void }) => {
                                                 </div>
                                                 <div className="w-full sm:w-auto flex flex-col items-end gap-2">
                                                     <div className="flex gap-2 w-full sm:w-auto">
-                                                        <input 
-                                                            type="text"
-                                                            placeholder="Pickup OTP"
-                                                            maxLength={4}
-                                                            className="w-24 bg-white border border-slate-200 px-3 py-2 rounded-xl text-center font-black tracking-widest outline-none focus:ring-2 focus:ring-teal"
-                                                            id={`pickup-${order.id}`}
-                                                        />
                                                         <button 
                                                             onClick={() => {
-                                                                const input = document.getElementById(`pickup-${order.id}`) as HTMLInputElement;
-                                                                if (input.value === order.pickupOtp) {
-                                                                    updateOrderStatus(order.id, 'PICKED_UP');
-                                                                } else {
-                                                                    alert('Invalid Pickup OTP from Restaurant!');
-                                                                }
+                                                                setOtpOrderId(order.id);
+                                                                setOtpValue('');
                                                             }}
-                                                            className="bg-slate-900 text-white font-black px-6 py-2 rounded-xl shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all active:scale-95"
+                                                            className="bg-slate-900 text-white font-black px-6 py-2 rounded-xl shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all active:scale-95 w-full sm:w-auto"
                                                         >
                                                             PICK UP
                                                         </button>
                                                     </div>
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Get code from Kitchen</p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Enter pickup OTP</p>
                                                 </div>
                                             </motion.div>
                                         ))}
@@ -409,6 +402,69 @@ const RiderDashboard = ({ onLogout }: { onLogout: () => void }) => {
                             </div>
                         </motion.div>
                     )}
+
+                    <AnimatePresence>
+                        {otpOrderId && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.95, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.95, opacity: 0 }}
+                                    className="bg-white w-full max-w-sm rounded-[28px] p-6 shadow-2xl border border-slate-200"
+                                >
+                                    <h3 className="text-lg font-black text-slate-900">Enter Pickup OTP</h3>
+                                    <p className="text-xs text-slate-500 font-medium mt-1">Get the code from the kitchen to pick up.</p>
+
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={4}
+                                        value={otpValue}
+                                        onChange={(e) => setOtpValue(e.target.value)}
+                                        className="mt-4 w-full bg-white border border-slate-200 px-4 py-3 rounded-2xl text-center font-black tracking-widest outline-none focus:ring-2 focus:ring-teal"
+                                        placeholder="____"
+                                    />
+
+                                    <div className="mt-5 flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setOtpOrderId(null);
+                                                setOtpValue('');
+                                            }}
+                                            className="flex-1 bg-slate-100 text-slate-700 font-black py-3 rounded-2xl hover:bg-slate-200 transition-all"
+                                        >
+                                            CANCEL
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const order = orders.find(o => o.id === otpOrderId);
+                                                if (!order) {
+                                                    setOtpOrderId(null);
+                                                    setOtpValue('');
+                                                    return;
+                                                }
+                                                if (otpValue.trim() === order.pickupOtp) {
+                                                    updateOrderStatus(order.id, 'PICKED_UP');
+                                                    setOtpOrderId(null);
+                                                    setOtpValue('');
+                                                } else {
+                                                    alert('Invalid Pickup OTP from Restaurant!');
+                                                }
+                                            }}
+                                            className="flex-1 bg-slate-900 text-white font-black py-3 rounded-2xl hover:bg-slate-800 transition-all"
+                                        >
+                                            CONFIRM
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </AnimatePresence>
             </main>
        </div>
