@@ -17,7 +17,8 @@ import {
   setDoc,
   Timestamp,
 } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 // User types
 export interface FirebaseUser {
@@ -240,4 +241,43 @@ export const getAllOrders = async (): Promise<FirebaseOrder[]> => {
   } catch (error: any) {
     throw new Error(`Failed to fetch orders: ${error.message}`);
   }
+};
+
+/**
+ * Real-time subscriptions
+ */
+export const subscribeToCustomerOrders = (customerId: string, cb: (orders: FirebaseOrder[]) => void) => {
+  const q = query(collection(db, 'orders'), where('customerId', '==', customerId));
+  const unsub = onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as FirebaseOrder[];
+    cb(orders);
+  });
+  return unsub;
+};
+
+export const subscribeToRestaurantOrders = (restaurantId: string | number, cb: (orders: FirebaseOrder[]) => void) => {
+  const q = query(collection(db, 'orders'), where('restaurantId', '==', restaurantId as any));
+  const unsub = onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as FirebaseOrder[];
+    cb(orders);
+  });
+  return unsub;
+};
+
+export const subscribeToRiderOrders = (riderId: string, cb: (orders: FirebaseOrder[]) => void) => {
+  const q = query(collection(db, 'orders'), where('riderId', '==', riderId));
+  const unsub = onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as FirebaseOrder[];
+    cb(orders);
+  });
+  return unsub;
+};
+
+export const subscribeToAllOrders = (cb: (orders: FirebaseOrder[]) => void) => {
+  const q = query(collection(db, 'orders'));
+  const unsub = onSnapshot(q, (snapshot) => {
+    const orders = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as FirebaseOrder[];
+    cb(orders);
+  });
+  return unsub;
 };

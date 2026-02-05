@@ -1250,6 +1250,10 @@ const CheckoutModal = ({
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'COD'>('UPI');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [upiId, setUpiId] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
 
   const itemTotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
@@ -1309,6 +1313,16 @@ const CheckoutModal = ({
   };
 
   const handlePayment = () => {
+    // Validate payment details
+    if (paymentMethod === 'UPI' && !upiId.trim()) {
+      alert('Please enter your UPI ID');
+      return;
+    }
+    if (paymentMethod === 'CARD' && (!cardNumber || cardNumber.length < 16 || !cardExpiry || !cardCvv)) {
+      alert('Please enter complete card details');
+      return;
+    }
+
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
@@ -1338,6 +1352,11 @@ const CheckoutModal = ({
         setShowSuccess(false);
         onOrderSuccess(orderData);
         onClose();
+        // Reset payment fields
+        setUpiId('');
+        setCardNumber('');
+        setCardExpiry('');
+        setCardCvv('');
       }, 2000);
     }, 2000);
   };
@@ -1678,6 +1697,60 @@ const CheckoutModal = ({
                              {paymentMethod === 'COD' && <CheckCircle2 size={16} className="text-teal" />}
                           </button>
                        </div>
+
+                       {/* Payment Details Input Fields */}
+                       {paymentMethod === 'UPI' && (
+                         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 space-y-3">
+                           <label className="block text-xs font-bold text-orange-900 uppercase tracking-wider">Enter UPI ID</label>
+                           <input 
+                             type="text" 
+                             placeholder="e.g. yourname@upi"
+                             value={upiId}
+                             onChange={(e) => setUpiId(e.target.value)}
+                             className="w-full bg-white border border-orange-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 transition-all font-bold"
+                           />
+                           <p className="text-[10px] text-orange-700">Supported: Google Pay, PhonePe, PayTM</p>
+                         </div>
+                       )}
+
+                       {paymentMethod === 'CARD' && (
+                         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+                           <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider">Card Details</label>
+                           <input 
+                             type="text" 
+                             placeholder="Card Number (16 digits)"
+                             value={cardNumber}
+                             onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                             maxLength={16}
+                             className="w-full bg-white border border-blue-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold"
+                           />
+                           <div className="grid grid-cols-2 gap-3">
+                             <input 
+                               type="text" 
+                               placeholder="MM/YY"
+                               value={cardExpiry}
+                               onChange={(e) => {
+                                 let val = e.target.value.replace(/\D/g, '');
+                                 if (val.length >= 2) {
+                                   val = val.slice(0, 2) + '/' + val.slice(2, 4);
+                                 }
+                                 setCardExpiry(val.slice(0, 5));
+                               }}
+                               maxLength={5}
+                               className="bg-white border border-blue-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold"
+                             />
+                             <input 
+                               type="text" 
+                               placeholder="CVV"
+                               value={cardCvv}
+                               onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                               maxLength={3}
+                               className="bg-white border border-blue-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 transition-all font-bold"
+                             />
+                           </div>
+                           <p className="text-[10px] text-blue-700">Visa, Mastercard, RuPay accepted</p>
+                         </div>
+                       )}
 
                        <div className="flex gap-4 pt-4">
                           <button 

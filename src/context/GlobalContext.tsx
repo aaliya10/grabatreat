@@ -1,4 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  createOrder as createOrderInFirestore,
+  subscribeToCustomerOrders,
+  subscribeToRestaurantOrders,
+  subscribeToRiderOrders,
+} from '../services/firebaseService';
+import { auth } from '../config/firebase';
+import { signInAnonymously } from 'firebase/auth';
 
 export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'COOKING' | 'READY' | 'PICKED_UP' | 'DELIVERED';
 export type OrderType = 'HOME' | 'TRAIN';
@@ -338,6 +346,36 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Earn points: 1 point per 10 rupees
     const earnedPoints = Math.floor(orderData.totalPrice / 10);
     setUserSession(prev => ({ ...prev, points: prev.points + earnedPoints }));
+
+    // If Firebase is configured, persist order to Firestore so it syncs across devices.
+    const firebaseConfigured = import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== 'YOUR_API_KEY';
+    if (firebaseConfigured) {
+      try {
+        console.log('[ORDER] Firebase is configured. Attempting to persist order to Firestore...');
+        // Map local order shape to Firestore-friendly shape
+        const persisted = {
+          customerId: userSession.mobile,
+          customerName: userSession.name,
+          restaurantId: orderData.restaurantId,
+          items: orderData.items.map(i => ({ itemId: String(i.name), quantity: i.quantity, price: i.price })),
+          totalPrice: orderData.totalPrice,
+          status: newOrder.status,
+          createdAt: new Date().toISOString(),
+          estimatedDelivery: '',
+          deliveryAddress: userSession.address || '',
+        } as any;
+
+        createOrderInFirestore(persisted).then((result) => {
+          console.log('[ORDER] Successfully persisted to Firestore:', result);
+        }).catch((err) => {
+          console.error('[ORDER] Failed to persist order to Firestore:', err.code || err.message || err);
+        });
+      } catch (err) {
+        console.error('[ORDER] Firestore order persistence error:', err);
+      }
+    } else {
+      console.log('[ORDER] Firebase not configured. Order saved locally only.');
+    }
   };
 
   const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
@@ -481,6 +519,106 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
   }, [orders]);
+
+  // Real-time syncing with Firestore when configured & user session exists
+  useEffect(() => {
+    const firebaseConfigured = import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== 'YOUR_API_KEY';
+    if (!firebaseConfigured) {
+      console.log('[SYNC] Firebase not configured. Skipping Firestore sync.');
+      return;
+    }
+
+    console.log('[SYNC] Firebase configured. Setting up anonymous sign-in and subscriptions...');
+
+    // Ensure we have a Firebase auth context (anonymous sign-in) so Firestore rules that
+    // require `request.auth != null` will pass. This keeps the app flow unchanged for demo.
+    if (!auth.currentUser) {
+      signInAnonymously(auth).then(() => {
+        console.log('[SYNC] Anonymous sign-in successful.');
+      }).catch((err) => {
+        console.warn('[SYNC] Anonymous Firebase sign-in failed:', err.code, err.message || err);
+      });
+    }
+
+    let unsub: (() => void) | null = null;
+
+    if (userSession.role === 'customer') {
+      console.log('[SYNC] Customer detected. Subscribing to customer orders for:', userSession.mobile);
+      unsub = subscribeToCustomerOrders(userSession.mobile, (remoteOrders) => {
+        console.log('[SYNC] Received customer orders from Firestore:', remoteOrders.length);
+        // Map remote orders to local Order shape as best-effort
+        const mapped = remoteOrders.map((o: any) => ({
+          id: o.id,
+          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+          totalPrice: o.totalPrice || 0,
+          status: (o.status as any) || 'PENDING',
+          type: 'HOME',
+          restaurantId: o.restaurantId || 1,
+          restaurantName: '',
+          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+          customerName: userSession.name || '',
+          pickupOtp: o.pickupOtp || '6789',
+          deliveryOtp: o.deliveryOtp || '9876',
+          review: o.review,
+          refundStatus: o.refundStatus,
+          refundReason: o.refundReason,
+        } as Order));
+        setOrders(mapped.reverse());
+      });
+    } else if (userSession.role === 'partner') {
+      const rid = userSession.restaurantId || 1;
+      console.log('[SYNC] Partner detected. Subscribing to restaurant orders for:', rid);
+      unsub = subscribeToRestaurantOrders(rid, (remoteOrders) => {
+        console.log('[SYNC] Received partner orders from Firestore:', remoteOrders.length);
+        const mapped = remoteOrders.map((o: any) => ({
+          id: o.id,
+          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+          totalPrice: o.totalPrice || 0,
+          status: (o.status as any) || 'PENDING',
+          type: 'HOME',
+          restaurantId: o.restaurantId || rid,
+          restaurantName: '',
+          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+          customerName: o.customerName || o.customerId || '',
+          pickupOtp: o.pickupOtp || '6789',
+          deliveryOtp: o.deliveryOtp || '9876',
+          review: o.review,
+          refundStatus: o.refundStatus,
+          refundReason: o.refundReason,
+        } as Order));
+        setOrders(mapped.reverse());
+      });
+    } else if (userSession.role === 'rider') {
+      console.log('[SYNC] Rider detected. Subscribing to rider orders for:', userSession.mobile);
+      unsub = subscribeToRiderOrders(userSession.mobile, (remoteOrders) => {
+        console.log('[SYNC] Received rider orders from Firestore:', remoteOrders.length);
+        const mapped = remoteOrders.map((o: any) => ({
+          id: o.id,
+          items: (o.items || []).map((it: any) => ({ name: it.itemId || it.name || 'item', price: it.price || 0, quantity: it.quantity || 1, isVeg: true })),
+          totalPrice: o.totalPrice || 0,
+          status: (o.status as any) || 'PENDING',
+          type: 'HOME',
+          restaurantId: o.restaurantId || 1,
+          restaurantName: '',
+          timestamp: o.createdAt ? new Date(o.createdAt).getTime() : Date.now(),
+          customerName: o.customerName || o.customerId || '',
+          pickupOtp: o.pickupOtp || '6789',
+          deliveryOtp: o.deliveryOtp || '9876',
+          review: o.review,
+          refundStatus: o.refundStatus,
+          refundReason: o.refundReason,
+        } as Order));
+        setOrders(mapped.reverse());
+      });
+    }
+
+    return () => {
+      if (unsub) {
+        console.log('[SYNC] Cleaning up subscriptions.');
+        unsub();
+      }
+    };
+  }, [userSession.role, userSession.mobile, userSession.restaurantId]);
 
   return (
     <GlobalContext.Provider value={{ 
