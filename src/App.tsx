@@ -2047,9 +2047,25 @@ const RefundModal = ({ isOpen, onClose, onSubmit, orderId }: { isOpen: boolean, 
   );
 };
 
+const formatOrderDateTime = (timestamp: number): string => {
+  if (!timestamp || isNaN(timestamp)) return 'Unknown Date';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} at ${hours}:${minutes}`;
+  } catch {
+    return 'Invalid Date';
+  }
+};
+
 const OrderTracker = ({ order, onBack }: { order: any, onBack: () => void }) => {
   return (
-    <div className="bg-white min-h-screen">
+    <div className="bg-white min-h-screen flex flex-col">
        <div className="p-4 flex items-center gap-4 border-b border-gray-100">
           <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full text-gray-400"><ArrowLeft size={24} /></button>
           <div>
@@ -2096,18 +2112,48 @@ const OrderTracker = ({ order, onBack }: { order: any, onBack: () => void }) => 
           </div>
        </div>
 
-       <div className="p-6 md:p-8 max-w-2xl mx-auto">
+       <div className="p-6 md:p-8 max-w-4xl mx-auto w-full">
           <div className="flex justify-between items-start mb-8">
              <div>
                 <h3 className="text-2xl font-extrabold text-charcoal">Arriving in 12 mins</h3>
                 <p className="text-slate-grey font-medium">Your rider Steve Rogers is on the way!</p>
+                <p className="text-xs text-gray-500 mt-2">Ordered on: {formatOrderDateTime(order.timestamp)}</p>
              </div>
-             <div className="flex flex-col items-end gap-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Share with Rider</span>
-                <div className="bg-teal text-white px-5 py-2.5 rounded-2xl font-black text-xl tracking-[0.2em] shadow-lg shadow-teal/20">
+             <div className="flex flex-col items-end gap-3">
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Pickup OTP</span>
+                  <div className="bg-blue-500 text-white px-4 py-2 rounded-lg font-black text-lg shadow-lg">
+                    {order.pickupOtp}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Delivery OTP</span>
+                  <div className="bg-teal text-white px-5 py-2.5 rounded-2xl font-black text-xl tracking-[0.2em] shadow-lg shadow-teal/20">
                     {order.deliveryOtp}
+                  </div>
                 </div>
              </div>
+          </div>
+
+          {/* Order Items Summary */}
+          <div className="bg-gray-50 rounded-xl p-4 mb-8 border border-gray-200">
+            <h4 className="font-bold text-charcoal mb-3">Order Items</h4>
+            <div className="space-y-2">
+              {order.items && order.items.length > 0 ? (
+                order.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-sm">
+                    <span className="text-slate-grey">{item.quantity}x {item.name}</span>
+                    <span className="font-bold text-charcoal">₹{(item.price * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-400">No items listed</p>
+              )}
+            </div>
+            <div className="border-t border-gray-300 mt-3 pt-3 flex justify-between font-bold text-charcoal">
+              <span>Total</span>
+              <span>₹{order.totalPrice}</span>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -2419,25 +2465,30 @@ const CustomerDashboard = ({ onLogout }: { onLogout: () => void }) => {
                         </div>
                       ) : (
                         orders.map(order => (
-                          <div key={order.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-4">
+                          <div key={order.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-4 hover:shadow-md transition-shadow">
                              <div className="flex justify-between items-start">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-extrabold text-charcoal">{order.id}</span>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${order.status === 'DELIVERED' ? 'bg-green-100 text-green-600' : 'bg-teal-100 text-teal-600'}`}>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <span className="font-extrabold text-lg text-charcoal">{order.restaurantName}</span>
+                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                                      order.status === 'DELIVERED' ? 'bg-green-100 text-green-600' : 
+                                      order.status === 'PENDING' ? 'bg-orange-100 text-orange-600' :
+                                      'bg-teal-100 text-teal-600'
+                                    }`}>
                                         {order.status}
                                     </span>
                                     </div>
-                                    <p className="text-sm text-slate-grey mb-1">{order.restaurantName}</p>
-                                    <p className="text-xs text-gray-400">{new Date(order.timestamp).toLocaleDateString()}</p>
+                                    <p className="text-xs text-gray-500 mb-2">Order ID: {order.id}</p>
+                                    <p className="text-sm font-medium text-slate-grey mb-1">{order.items?.length || 0} item(s) • ₹{order.totalPrice}</p>
+                                    <p className="text-xs text-gray-400">{formatOrderDateTime(order.timestamp)}</p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="font-extrabold text-charcoal">₹{order.totalPrice}</p>
+                                <div className="text-right flex flex-col items-end">
+                                    <p className="font-extrabold text-lg text-charcoal mb-2">₹{order.totalPrice}</p>
                                     <button 
                                     onClick={() => setActiveOrder(order)}
-                                    className="text-teal text-xs font-bold hover:underline mt-1"
+                                    className="text-teal text-xs font-bold hover:bg-teal hover:text-white px-3 py-1.5 rounded-lg transition-colors border border-teal"
                                     >
-                                    Track / Details
+                                    View Details
                                     </button>
                                 </div>
                              </div>
