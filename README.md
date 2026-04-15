@@ -156,6 +156,3 @@ Feel free to extend this project with:
 
 Free to use for educational purposes.
 
----
-
-**Made with ❤️ for college projects**
