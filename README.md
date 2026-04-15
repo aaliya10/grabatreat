@@ -113,7 +113,7 @@ Use any of these to test:
 
 ## 🌍 Live Demo
 
-🔗 **[Visit Live Application](https://grab-a-treat-aaliya.vercel.app)**
+🔗 **[Visit Live Application](grabatreat.vercel.app)**
 
 ## 📸 Key Screens
 
